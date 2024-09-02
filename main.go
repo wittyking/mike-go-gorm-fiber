@@ -4,11 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v4"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -22,22 +19,33 @@ const (
 	dbname   = "mydatabase" // as defined in docker-compose.yml
 )
 
-func authRequired(c *fiber.Ctx) error {
-	cookie := c.Cookies("jwt")
-	jwtSecretKey := "TestSecret"
+type Book struct {
+	gorm.Model
+	Name        string `json:"name"`
+	Author      string `json:"author"`
+	Description string `json:"description"`
+	PublisherID uint
+	Publisher   Publisher
+	Authors     []Author `gorm:"many2many:author_books;"`
+}
 
-	token, err := jwt.ParseWithClaims(cookie, jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(jwtSecretKey), nil
-	})
+type Publisher struct {
+	gorm.Model
+	Details string
+	Name    string
+}
 
-	if err != nil || !token.Valid {
-		return c.SendStatus(fiber.StatusUnauthorized)
-	}
+type Author struct {
+	gorm.Model
+	Name  string
+	Books []Book `gorm:"many2many:author_books;"`
+}
 
-	claim := token.Claims.(jwt.MapClaims)
-
-	fmt.Println(claim)
-	return c.Next()
+type AuthorBook struct {
+	AuthorID uint
+	Author   Author
+	BookID   uint
+	Book     Book
 }
 
 func main() {
@@ -63,158 +71,55 @@ func main() {
 	if err != nil {
 		panic("failed to connect database")
 	}
-	// db.Migrator().DropColumn(&Book{}, "name")
-	db.AutoMigrate(&Book{}, &User{})
 
-	//setup Fiber
-	app := fiber.New()
-	app.Use("/books", authRequired)
+	db.AutoMigrate(&Book{}, &Publisher{}, &Author{}, &AuthorBook{})
 
-	app.Get("/books", func(c *fiber.Ctx) error {
-		return c.JSON(getBooks(db))
-	})
-
-	app.Get("/books/:id", func(c *fiber.Ctx) error {
-		id, err := strconv.Atoi(c.Params("id"))
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-		book := getBook(db, id)
-		return c.JSON(book)
-	})
-
-	app.Post("/books", func(c *fiber.Ctx) error {
-		book := new(Book)
-		if err := c.BodyParser(book); err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		err := createBook(db, book)
-
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		return c.JSON(fiber.Map{
-			"message": "Create Book Successful",
-		})
-	})
-
-	app.Put("/books/:id", func(c *fiber.Ctx) error {
-		id, err := strconv.Atoi(c.Params("id"))
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		book := new(Book)
-
-		if err := c.BodyParser(book); err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		book.ID = uint(id)
-
-		err = updateBook(db, book)
-
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-		return c.JSON(fiber.Map{
-			"message": "Update Book Successful",
-		})
-	})
-
-	app.Delete("/books/:id", func(c *fiber.Ctx) error {
-		// id, err := strconv.Atoi(c.Params("id"))//case converse to int
-		id, err := strconv.ParseUint(c.Params("id"), 10, 0) //case converse to uint
-
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		err = deleteBook(db, id)
-
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-		return c.JSON(fiber.Map{
-			"message": "Delete Book Successful",
-		})
-	})
-
-	app.Post("/register", func(c *fiber.Ctx) error {
-		user := new(User)
-
-		if err := c.BodyParser(user); err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		err = createUser(db, user)
-
-		if err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		return c.JSON(fiber.Map{
-			"message": "Register Successful",
-		})
-
-	})
-
-	app.Post("/login", func(c *fiber.Ctx) error {
-		user := new(User)
-
-		if err := c.BodyParser(user); err != nil {
-			return c.SendStatus(fiber.StatusBadRequest)
-		}
-
-		token, err := loginUser(db, user)
-
-		if err != nil {
-			return c.SendStatus(fiber.StatusUnauthorized)
-		}
-
-		c.Cookie(&fiber.Cookie{
-			Name:     "jwt",
-			Value:    token,
-			Expires:  time.Now().Add(time.Hour * 72),
-			HTTPOnly: true,
-		})
-
-		return c.JSON(fiber.Map{
-			// "token": token,
-			"message": "Login successful!",
-		})
-
-	})
-
-	app.Listen(":8040")
-	fmt.Println("Migtate successful!")
-
-	// newBook := &Book{
-	// 	Name:        "Mile",
-	// 	Author:      "lopster",
-	// 	Description: "test555",
-	// 	Price:       100,
-	// }
-
-	// createBook(db, newBook)
-
-	// currentBook := getBook(db, 1)
-
-	// currentBook.Name = "New Mike"
-	// currentBook.Price = 400
-
-	// updateBook(db, currentBook)
-
-	// deleteBook(db, 1)
-
-	// currentBook := getBook(db, 1)
-	// fmt.Println(currentBook)
-
-	currentBook := searchBook(db, "Mile")
-	// fmt.Println(currentBook)
-	for _, book := range currentBook {
-		fmt.Println(book.ID, book.Name, book.Author, book.Price)
+	publisher := Publisher{
+		Details: "Mikelopster",
+		Name:    "Mike",
 	}
+	_ = createPublisher(db, &publisher)
+
+	author1 := Author{
+		Name: "Mike1",
+	}
+	_ = createAuthor(db, &author1)
+
+	author2 := Author{
+		Name: "Mike2",
+	}
+	_ = createAuthor(db, &author2)
+
+	book := Book{
+		Name:        "Mike Book",
+		Author:      "0000",
+		Description: "Book Description",
+		PublisherID: publisher.ID,
+		Authors:     []Author{author1, author2},
+	}
+	_ = createBookWithAuthor(db, &book)
+}
+
+func createPublisher(db *gorm.DB, publisher *Publisher) error {
+	result := db.Create(publisher)
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func createAuthor(db *gorm.DB, author *Author) error {
+	result := db.Create(author)
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func createBookWithAuthor(db *gorm.DB, book *Book) error {
+	if err := db.Create(book).Error; err != nil {
+		return err
+	}
+
+	return nil
 }
