@@ -74,30 +74,37 @@ func main() {
 
 	db.AutoMigrate(&Book{}, &Publisher{}, &Author{}, &AuthorBook{})
 
-	publisher := Publisher{
-		Details: "Mikelopster",
-		Name:    "Mike",
-	}
-	_ = createPublisher(db, &publisher)
+	// publisher := Publisher{
+	// 	Details: "Mikelopster",
+	// 	Name:    "Mike",
+	// }
+	// _ = createPublisher(db, &publisher)
 
-	author1 := Author{
-		Name: "Mike1",
-	}
-	_ = createAuthor(db, &author1)
+	// author1 := Author{
+	// 	Name: "Mike1",
+	// }
+	// _ = createAuthor(db, &author1)
 
-	author2 := Author{
-		Name: "Mike2",
-	}
-	_ = createAuthor(db, &author2)
+	// author2 := Author{
+	// 	Name: "Mike2",
+	// }
+	// _ = createAuthor(db, &author2)
 
-	book := Book{
-		Name:        "Mike Book",
-		Author:      "0000",
-		Description: "Book Description",
-		PublisherID: publisher.ID,
-		Authors:     []Author{author1, author2},
-	}
-	_ = createBookWithAuthor(db, &book)
+	// book := Book{
+	// 	Name:        "Mike Book",
+	// 	Author:      "0000",
+	// 	Description: "Book Description",
+	// 	PublisherID: publisher.ID,
+	// 	Authors:     []Author{author1, author2},
+	// }
+	// _ = createBookWithAuthor(db, &book)
+
+	book, err := listBooksOfAuthor(db, 2)
+	// book, err := getBookWithAuthors(db, 2)
+	// book, err := getBookWithPublisher(db, 2)
+	fmt.Println("=========")
+	fmt.Println(book)
+
 }
 
 func createPublisher(db *gorm.DB, publisher *Publisher) error {
@@ -122,4 +129,33 @@ func createBookWithAuthor(db *gorm.DB, book *Book) error {
 	}
 
 	return nil
+}
+
+func getBookWithPublisher(db *gorm.DB, bookID uint) (*Book, error) {
+	var book Book
+	result := db.Preload("Publisher").First(&book, bookID)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &book, nil
+}
+
+func getBookWithAuthors(db *gorm.DB, bookID uint) (*Book, error) {
+	var book Book
+	result := db.Preload("Authors").First(&book, bookID)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &book, nil
+}
+
+func listBooksOfAuthor(db *gorm.DB, authorID uint) ([]Book, error) {
+	var books []Book
+	result := db.Joins("JOIN author_books on author_books.book_id = books.id").
+		Where("author_books.author_id = ?", authorID).
+		Find(&books)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return books, nil
 }
